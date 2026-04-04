@@ -68,8 +68,11 @@ pub async fn create_page(
     }
 }
 
-pub async fn generate_qr(Path(slug): Path<String>) -> Response {
-    let url = format!("http://localhost:3000/e/{}", slug);
+pub async fn generate_qr(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Response {
+    let url = format!("{}/e/{}", state.config.base_url, slug);
     let code = QrCode::new(url.as_bytes()).unwrap();
     let svg = code.render::<svg::Color>()
         .min_dimensions(200, 200)

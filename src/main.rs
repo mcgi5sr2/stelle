@@ -1,7 +1,8 @@
-mod state;
-mod models;
+mod config;
 mod handlers;
+mod models;
 mod slug;
+mod state;
 
 use axum::{
     Router,
@@ -16,6 +17,8 @@ use state::AppState;
 #[tokio::main()]
 async fn main() {
     dotenvy::dotenv().ok();
+
+    let config = config::Config::from_env();
 
     let database_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set");
@@ -32,7 +35,7 @@ async fn main() {
         .route("/admin/pages/new", get(handlers::new_page_form))
         .route("/admin/pages", post(handlers::create_page))
         .route("/admin/pages/{slug}/qr", get(handlers::generate_qr))
-        .with_state(AppState { db: pool });
+        .with_state(AppState { db: pool , config});
 
     let listener = TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("Listening on http://localhost:3000");
