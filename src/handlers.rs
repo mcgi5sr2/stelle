@@ -2,12 +2,13 @@ use axum::{
     body::Body,
     extract::{Form, Path, State},
     http::header,
-    response::{Html, Redirect, Response},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use qrcode::{QrCode, render::svg};
 
 use crate::models::{NewPage, Page};
 use crate::state::AppState;
+use crate::slug::slugify;
 
 pub async fn show_exhibit(
     State(state): State<AppState>,
@@ -47,18 +48,24 @@ pub async fn new_page_form() -> Html<String> {
 pub async fn create_page(
     State(state): State<AppState>,
     Form(input): Form<NewPage>,
-) -> Redirect {
-    sqlx::query!(
+) -> Response {
+    let Some(slug) = slugify(&input.slug) else {
+        return Html("<h1>Invlaid slug</h1>".to_string()).into_response();
+    };
+
+    let result = sqlx::query!(
         "INSERT INTO pages (slug, title, body) VALUES ($1, $2, $3)",
-        input.slug,
+       slug,
         input.title,
         input.body
     )
     .execute(&state.db)
-    .await
-    .expect("Failed to insert page");
+    .await;
 
-    Redirect::to(&format!("/e/{}", input.slug))
+    match result {
+        Ok(_) => Redirect::to(&format!("/e/{}", slug)).into_response(),
+        Err(_) => Html("<h1> A page with that slug alread exists</h1>".to_string()).into_response(),
+    }
 }
 
 pub async fn generate_qr(Path(slug): Path<String>) -> Response {

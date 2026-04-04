@@ -1,6 +1,7 @@
 mod state;
 mod models;
 mod handlers;
+mod slug;
 
 use axum::{
     Router,
