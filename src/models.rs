@@ -12,3 +12,9 @@ pub struct NewPage {
     pub title: String,
     pub body: String,
 }
+
+#[derive(serde::Deserialize)]
+pub struct LoginForm {
+    pub username: String,
+    pub password: String,
+}
