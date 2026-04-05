@@ -6,6 +6,7 @@ use axum::{
 };
 use qrcode::{QrCode, render::svg};
 
+use crate::error::AppError;
 use crate::models::{NewPage, Page};
 use crate::state::AppState;
 use crate::slug::slugify;
@@ -71,19 +72,20 @@ pub async fn create_page(
 pub async fn generate_qr(
     State(state): State<AppState>,
     Path(slug): Path<String>,
-) -> Response {
+) -> Result<Response, AppError> {
     let url = format!("{}/e/{}", state.config.base_url, slug);
-    let code = QrCode::new(url.as_bytes()).unwrap();
+    let code = QrCode::new(url.as_bytes())
+        .map_err(|_| AppError::QrCode)?;
     let svg = code.render::<svg::Color>()
         .min_dimensions(200, 200)
         .build();
 
-    Response::builder()
+    Ok(Response::builder()
         .header(header::CONTENT_TYPE, "image/svg+xml")
         .header(
                 header::CONTENT_DISPOSITION,
                 format!("attachment; filename=\"{}.svg\"", slug),
         )
         .body(Body::from(svg))
-        .unwrap()
+        .unwrap())
 }

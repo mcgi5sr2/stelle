@@ -2086,6 +2086,7 @@ dependencies = [
  "qrcode",
  "serde",
  "sqlx",
+ "thiserror",
  "tokio",
 ]
 
