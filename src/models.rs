@@ -18,3 +18,12 @@ pub struct LoginForm {
     pub username: String,
     pub password: String,
 }
+
+#[derive(sqlx::Type, Debug)]
+#[sqlx(type_name = "media_kind", rename_all = "lowercase")]
+pub enum MediaKind {
+    Image,
+    Audio,
+    Video,
+    Pdf,
+}

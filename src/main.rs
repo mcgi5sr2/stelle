@@ -47,6 +47,8 @@ async fn main() {
         ));
 
     let app = Router::new()
+        .route("/admin/media", get(handlers::media_page))
+        .route("/admin/media/upload", post(handlers::upload_media))
         .route("/e/{slug}", get(handlers::show_exhibit))
         .route("/login", get(handlers::login_form))
         .route("/login", post(handlers::login_submit))

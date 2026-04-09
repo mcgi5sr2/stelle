@@ -1,15 +1,16 @@
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::{
     body::Body,
-    extract::{Form, Path, State},
+    extract::{Form, Multipart, Path, State},
     http::header,
     response::{Html, IntoResponse, Redirect, Response},
 };
 use tower_sessions::Session;
 use qrcode::{QrCode, render::svg};
+use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::models::{LoginForm, NewPage, Page};
+use crate::models::{LoginForm, MediaKind, NewPage, Page};
 use crate::state::AppState;
 use crate::slug::slugify;
 
@@ -150,4 +151,65 @@ pub async fn login_submit(
 pub async fn logout(session: Session) -> Redirect {
     session.flush().await.unwrap();
     Redirect::to("/login")
+}
+
+pub async  fn upload_media(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+ ) -> Result<Response, AppError> {
+        while let Some(field) = multipart.next_field().await? {
+            let filename = field.file_name()
+                .unwrap_or("unknown")
+                .to_string();
+
+            let content_type = field.content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
+
+        let kind = match content_type.as_str() {
+            ct if ct.starts_with("image/") => MediaKind::Image,
+            ct if ct.starts_with("audio/") => MediaKind::Audio,
+            ct if ct.starts_with("video/") => MediaKind::Video,
+            "application/pdf" => MediaKind::Pdf,
+            _ => return Ok(Html("<h1>Unsupported file type</h1>".to_string()).into_response()),
+        };
+
+            let data = field.bytes().await?;
+            let file_size = data.len() as i64;
+
+            let ext = filename.rsplit('.').next().unwrap_or("bin");
+            let storage_path = format!("uploads/{}.{}", Uuid::new_v4(), ext);
+
+            tokio::fs::write(&storage_path, &data).await
+                .map_err(|_| AppError::Upload)?;
+
+        sqlx::query!(
+            "INSERT INTO media (kind, filename, storage_path, mime_type, file_size, uploaded_by)
+             VALUES ($1, $2, $3, $4, $5, $6)",
+            kind as MediaKind,
+            filename,
+            storage_path,
+            content_type,
+            file_size,
+            None::<i32>
+        )
+            .execute(&state.db)
+            .await?;
+        }
+        Ok(Redirect::to("/admin/media").into_response())
+}
+
+pub async fn media_page() -> Html<String> {
+    Html(r#"
+        <!DOCTYPE html>
+        <html>
+        <body>
+            <h1>Upload Media</h1>
+            <form method="POST" action="/admin/media/upload" enctype="multipart/form-data">
+                <input type="file" name="file"><br><br>
+                <button type="submit">Upload</button>
+            </form>
+        </body>
+        </html>
+    "#.to_string())
 }
