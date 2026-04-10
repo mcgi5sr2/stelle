@@ -7,6 +7,7 @@ mod slug;
 mod state;
 
 use axum::{
+    extract::DefaultBodyLimit,
     middleware as axum_middleware,
     Router,
     routing::{get, post},
@@ -48,7 +49,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/admin/media", get(handlers::media_page))
-        .route("/admin/media/upload", post(handlers::upload_media))
+.route("/admin/media/upload", post(handlers::upload_media)
+    .layer(DefaultBodyLimit::max(50 * 1024 * 1024))) // 50MB
         .route("/e/{slug}", get(handlers::show_exhibit))
         .route("/login", get(handlers::login_form))
         .route("/login", post(handlers::login_submit))

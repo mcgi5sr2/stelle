@@ -173,7 +173,7 @@ pub async  fn upload_media(
             "application/pdf" => MediaKind::Pdf,
             _ => return Ok(Html("<h1>Unsupported file type</h1>".to_string()).into_response()),
         };
-
+ 
             let data = field.bytes().await?;
             let file_size = data.len() as i64;
 
@@ -199,8 +199,18 @@ pub async  fn upload_media(
         Ok(Redirect::to("/admin/media").into_response())
 }
 
-pub async fn media_page() -> Html<String> {
-    Html(r#"
+pub async fn media_page(State(state): State<AppState>) -> Html<String> {
+    let media = sqlx::query!("SELECT id, kind as \"kind: MediaKind\", filename, created_at FROM media ORDER BY created_at DESC")
+        .fetch_all(&state.db)
+        .await
+        .expect("Failed to fetch media");
+
+    let rows = media.iter().map(|m| {
+        format!("<tr><td>{}</td><td>{:?}</td><td>{}</td></tr>",
+            m.id, m.kind, m.filename)
+    }).collect::<String>();
+
+    Html(format!(r#"
         <!DOCTYPE html>
         <html>
         <body>
@@ -209,7 +219,12 @@ pub async fn media_page() -> Html<String> {
                 <input type="file" name="file"><br><br>
                 <button type="submit">Upload</button>
             </form>
+            <h2>Uploaded Files</h2>
+            <table border="1">
+                <tr><th>ID</th><th>Kind</th><th>Filename</th></tr>
+                {}
+            </table>
         </body>
         </html>
-    "#.to_string())
+    "#, rows))
 }
