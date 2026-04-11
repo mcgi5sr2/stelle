@@ -7,16 +7,17 @@ mod slug;
 mod state;
 
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
     middleware as axum_middleware,
-    Router,
     routing::{get, post},
 };
 use sqlx::postgres::PgPoolOptions;
+use state::AppState;
 use tokio::net::TcpListener;
+use tower_http::services::ServeDir;
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
-use state::AppState;
 
 #[tokio::main()]
 async fn main() {
@@ -24,8 +25,7 @@ async fn main() {
 
     let config = config::Config::from_env();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
@@ -34,27 +34,37 @@ async fn main() {
         .expect("Failed to connect to database");
 
     let session_store = PostgresStore::new(pool.clone());
-    session_store.migrate().await.expect("Failed to migrate session store");
-    let session_layer = SessionManagerLayer::new(session_store)
-        .with_secure(false);
+    session_store
+        .migrate()
+        .await
+        .expect("Failed to migrate session store");
+    let session_layer = SessionManagerLayer::new(session_store).with_secure(false);
 
+    // private route (require auth)
     let admin_routes = Router::new()
         .route("/admin/pages/new", get(handlers::new_page_form))
         .route("/admin/pages", post(handlers::create_page))
         .route("/admin/pages/{slug}/qr", get(handlers::generate_qr))
         .route_layer(axum_middleware::from_fn_with_state(
-            AppState { db: pool.clone(), config: config.clone() },
+            AppState {
+                db: pool.clone(),
+                config: config.clone(),
+            },
             middleware::require_auth,
         ));
 
+    // public routes (no auth)
     let app = Router::new()
         .route("/admin/media", get(handlers::media_page))
-.route("/admin/media/upload", post(handlers::upload_media)
-    .layer(DefaultBodyLimit::max(50 * 1024 * 1024))) // 50MB
+        .route(
+            "/admin/media/upload",
+            post(handlers::upload_media).layer(DefaultBodyLimit::max(50 * 1024 * 1024)),
+        ) // 50MB
         .route("/e/{slug}", get(handlers::show_exhibit))
         .route("/login", get(handlers::login_form))
         .route("/login", post(handlers::login_submit))
         .route("/logout", post(handlers::logout))
+        .nest_service("/uploads", ServeDir::new("uploads"))
         .merge(admin_routes)
         .layer(session_layer)
         .with_state(AppState { db: pool, config });

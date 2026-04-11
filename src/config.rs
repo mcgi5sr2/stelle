@@ -6,8 +6,7 @@ pub struct Config {
 impl Config {
     pub fn from_env() -> Self {
         Config {
-            base_url: std::env::var("BASE_URL")
-                .expect("BASE_URL must be set")
+            base_url: std::env::var("BASE_URL").expect("BASE_URL must be set"),
         }
     }
 }

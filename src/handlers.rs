@@ -5,23 +5,20 @@ use axum::{
     http::header,
     response::{Html, IntoResponse, Redirect, Response},
 };
-use tower_sessions::Session;
 use qrcode::{QrCode, render::svg};
+use tower_sessions::Session;
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::models::{LoginForm, MediaKind, NewPage, Page};
-use crate::state::AppState;
 use crate::slug::slugify;
+use crate::state::AppState;
 
-pub async fn show_exhibit(
-    State(state): State<AppState>,
-    Path(slug): Path<String>,
-) -> Html<String> {
+pub async fn show_exhibit(State(state): State<AppState>, Path(slug): Path<String>) -> Html<String> {
     let page = sqlx::query_as!(Page, "SELECT title, body FROM pages WHERE slug = $1", slug)
         .fetch_one(&state.db)
         .await;
-    
+
     match page {
         Ok(p) => Html(format!(
             "<h1>{}</h1><p>{}</p>",
@@ -33,7 +30,8 @@ pub async fn show_exhibit(
 }
 
 pub async fn new_page_form() -> Html<String> {
-    Html(r#"
+    Html(
+        r#"
         <!DOCTYPE html>
         <html>
         <body>
@@ -46,20 +44,19 @@ pub async fn new_page_form() -> Html<String> {
             </form>
         </body>
         </html>
-    "#.to_string())
+    "#
+        .to_string(),
+    )
 }
 
-pub async fn create_page(
-    State(state): State<AppState>,
-    Form(input): Form<NewPage>,
-) -> Response {
+pub async fn create_page(State(state): State<AppState>, Form(input): Form<NewPage>) -> Response {
     let Some(slug) = slugify(&input.slug) else {
         return Html("<h1>Invlaid slug</h1>".to_string()).into_response();
     };
 
     let result = sqlx::query!(
         "INSERT INTO pages (slug, title, body) VALUES ($1, $2, $3)",
-       slug,
+        slug,
         input.title,
         input.body
     )
@@ -77,24 +74,22 @@ pub async fn generate_qr(
     Path(slug): Path<String>,
 ) -> Result<Response, AppError> {
     let url = format!("{}/e/{}", state.config.base_url, slug);
-    let code = QrCode::new(url.as_bytes())
-        .map_err(|_| AppError::QrCode)?;
-    let svg = code.render::<svg::Color>()
-        .min_dimensions(200, 200)
-        .build();
+    let code = QrCode::new(url.as_bytes()).map_err(|_| AppError::QrCode)?;
+    let svg = code.render::<svg::Color>().min_dimensions(200, 200).build();
 
     Ok(Response::builder()
         .header(header::CONTENT_TYPE, "image/svg+xml")
         .header(
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"{}.svg\"", slug),
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{}.svg\"", slug),
         )
         .body(Body::from(svg))
         .unwrap())
 }
 
 pub async fn login_form() -> Html<String> {
-    Html(r#"
+    Html(
+        r#"
         <!DOCTYPE html>
         <html>
         <body>
@@ -106,7 +101,9 @@ pub async fn login_form() -> Html<String> {
             </form>
         </body>
         </html>
-    "#.to_string())
+    "#
+        .to_string(),
+    )
 }
 
 pub async fn login_submit(
@@ -115,7 +112,7 @@ pub async fn login_submit(
     Form(input): Form<LoginForm>,
 ) -> Response {
     println!("1: handler reached");
-    
+
     let user = sqlx::query!(
         "SELECT id, password_hash FROM users WHERE username = $1 AND deactivated_at IS NULL",
         input.username
@@ -128,7 +125,9 @@ pub async fn login_submit(
 
     let valid = user.as_ref().map_or(false, |u| {
         let parsed = PasswordHash::new(&u.password_hash).unwrap();
-        Argon2::default().verify_password(input.password.as_bytes(), &parsed).is_ok()
+        Argon2::default()
+            .verify_password(input.password.as_bytes(), &parsed)
+            .is_ok()
     });
 
     println!("3: valid: {}", valid);
@@ -145,7 +144,6 @@ pub async fn login_submit(
     } else {
         Html("<h1>Invalid username or password</h1>".to_string()).into_response()
     }
-
 }
 
 pub async fn logout(session: Session) -> Redirect {
@@ -153,18 +151,17 @@ pub async fn logout(session: Session) -> Redirect {
     Redirect::to("/login")
 }
 
-pub async  fn upload_media(
+pub async fn upload_media(
     State(state): State<AppState>,
     mut multipart: Multipart,
- ) -> Result<Response, AppError> {
-        while let Some(field) = multipart.next_field().await? {
-            let filename = field.file_name()
-                .unwrap_or("unknown")
-                .to_string();
+) -> Result<Response, AppError> {
+    while let Some(field) = multipart.next_field().await? {
+        let filename = field.file_name().unwrap_or("unknown").to_string();
 
-            let content_type = field.content_type()
-                .unwrap_or("application/octet-stream")
-                .to_string();
+        let content_type = field
+            .content_type()
+            .unwrap_or("application/octet-stream")
+            .to_string();
 
         let kind = match content_type.as_str() {
             ct if ct.starts_with("image/") => MediaKind::Image,
@@ -173,15 +170,16 @@ pub async  fn upload_media(
             "application/pdf" => MediaKind::Pdf,
             _ => return Ok(Html("<h1>Unsupported file type</h1>".to_string()).into_response()),
         };
- 
-            let data = field.bytes().await?;
-            let file_size = data.len() as i64;
 
-            let ext = filename.rsplit('.').next().unwrap_or("bin");
-            let storage_path = format!("uploads/{}.{}", Uuid::new_v4(), ext);
+        let data = field.bytes().await?;
+        let file_size = data.len() as i64;
 
-            tokio::fs::write(&storage_path, &data).await
-                .map_err(|_| AppError::Upload)?;
+        let ext = filename.rsplit('.').next().unwrap_or("bin");
+        let storage_path = format!("uploads/{}.{}", Uuid::new_v4(), ext);
+
+        tokio::fs::write(&storage_path, &data)
+            .await
+            .map_err(|_| AppError::Upload)?;
 
         sqlx::query!(
             "INSERT INTO media (kind, filename, storage_path, mime_type, file_size, uploaded_by)
@@ -193,24 +191,34 @@ pub async  fn upload_media(
             file_size,
             None::<i32>
         )
-            .execute(&state.db)
-            .await?;
-        }
-        Ok(Redirect::to("/admin/media").into_response())
+        .execute(&state.db)
+        .await?;
+    }
+    Ok(Redirect::to("/admin/media").into_response())
 }
 
 pub async fn media_page(State(state): State<AppState>) -> Html<String> {
-    let media = sqlx::query!("SELECT id, kind as \"kind: MediaKind\", filename, created_at FROM media ORDER BY created_at DESC")
+    let media = sqlx::query!("SELECT id, kind as \"kind: MediaKind\", filename, storage_path, created_at FROM media ORDER BY created_at DESC")
         .fetch_all(&state.db)
         .await
         .expect("Failed to fetch media");
 
-    let rows = media.iter().map(|m| {
-        format!("<tr><td>{}</td><td>{:?}</td><td>{}</td></tr>",
-            m.id, m.kind, m.filename)
-    }).collect::<String>();
+    let rows = media
+        .iter()
+        .map(|m| {
+            let preview = match m.kind {
+                MediaKind::Image => format!("<img src=\"/{}\" height=\"60\">", m.storage_path),
+                _ => String::new(),
+            };
+            format!(
+                "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td></tr>",
+                m.id, m.kind, m.filename, preview
+            )
+        })
+        .collect::<String>();
 
-    Html(format!(r#"
+    Html(format!(
+        r#"
         <!DOCTYPE html>
         <html>
         <body>
@@ -226,5 +234,7 @@ pub async fn media_page(State(state): State<AppState>) -> Html<String> {
             </table>
         </body>
         </html>
-    "#, rows))
+    "#,
+        rows
+    ))
 }

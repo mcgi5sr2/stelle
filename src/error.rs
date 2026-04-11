@@ -1,6 +1,6 @@
+use axum::extract::multipart::MultipartError;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::extract::multipart::MultipartError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -21,8 +21,14 @@ pub enum AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
-            AppError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "A database error occurred"),
-            AppError::QrCode => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to generate QR code"),
+            AppError::Database(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "A database error occurred",
+            ),
+            AppError::QrCode => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to generate QR code",
+            ),
             AppError::Upload => (StatusCode::INTERNAL_SERVER_ERROR, "File upload failed"),
             AppError::Multipart(_) => (StatusCode::BAD_REQUEST, "Invalid multipart request"),
         };
